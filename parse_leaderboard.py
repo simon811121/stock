@@ -245,6 +245,9 @@ aRstDf = aRstDf[["代號", "名稱"]]
 # 外資單日
 url = 'https://goodinfo.tw/StockInfo/StockList.asp?RPT_TIME=&MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E5%A4%96%E8%B3%87%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5%40%40%E5%A4%96%E8%B3%87%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%40%40%E5%A4%96%E8%B3%87%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5'
 fRsltDf = parseLeaderBoard(url, LEADERBOARD_MAX_RANK_CHK)
+aRstDf2 = pd.concat([aRstDf, fRsltDf['法人買賣日期']],axis=1)
+saveToExcel(aRstDf2, 0, 1, '成交量與昨日排行比')
+
 saveToExcel(fRsltDf, 0, (LEADERBOARD_MAX_RANK_CHK + 5), '外資 單日')
 
 # 投信單日
