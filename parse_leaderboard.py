@@ -233,23 +233,29 @@ def splitDfByDiffOverlap(srcDf, startOfst):
 print(datetime.datetime.now())
 LEADERBOARD_MAX_RANK_CHK = 30
 
+# a = amount = 成交量
+# 成交量與昨日排行比
+url = 'https://goodinfo.tw/StockInfo/StockList.asp?RPT_TIME=&MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E6%88%90%E4%BA%A4%E9%87%8F%E5%A2%9E%E5%8A%A0%E5%BC%B5%E6%95%B8%E2%80%93%E7%95%B6%E6%97%A5%E6%88%90%E4%BA%A4%E9%87%8F%E8%88%87%E6%98%A8%E6%97%A5%E6%AF%94%40%40%E6%88%90%E4%BA%A4%E9%87%8F%E5%A2%9E%E5%8A%A0%E5%BC%B5%E6%95%B8%40%40%E7%95%B6%E6%97%A5%E6%88%90%E4%BA%A4%E9%87%8F%E8%88%87%E6%98%A8%E6%97%A5%E6%AF%94'
+aRstDf = parseLeaderBoard(url, LEADERBOARD_MAX_RANK_CHK)
+aRstDf = aRstDf[["代號", "名稱"]]
+
 # f = foreign = 外資
 # i = invset trust = 投信
 # d = dealer = 自營商
 # 外資單日
 url = 'https://goodinfo.tw/StockInfo/StockList.asp?RPT_TIME=&MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E5%A4%96%E8%B3%87%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5%40%40%E5%A4%96%E8%B3%87%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%40%40%E5%A4%96%E8%B3%87%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5'
 fRsltDf = parseLeaderBoard(url, LEADERBOARD_MAX_RANK_CHK)
-saveToExcel(fRsltDf, 0, 1, '外資 單日')
+saveToExcel(fRsltDf, 0, (LEADERBOARD_MAX_RANK_CHK + 5), '外資 單日')
 
 # 投信單日
 url = 'https://goodinfo.tw/StockInfo/StockList.asp?RPT_TIME=&MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E6%8A%95%E4%BF%A1%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5%40%40%E6%8A%95%E4%BF%A1%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%40%40%E6%8A%95%E4%BF%A1%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5'
 iRsltDf = parseLeaderBoard(url, LEADERBOARD_MAX_RANK_CHK)
-saveToExcel(iRsltDf, 0, (LEADERBOARD_MAX_RANK_CHK + 5), '投信 單日')
+saveToExcel(iRsltDf, 0, ((LEADERBOARD_MAX_RANK_CHK + 5) * 2), '投信 單日')
 
 # 自營商單日
 url = 'https://goodinfo.tw/StockInfo/StockList.asp?RPT_TIME=&MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E8%87%AA%E7%87%9F%E5%95%86%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5%40%40%E8%87%AA%E7%87%9F%E5%95%86%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%40%40%E8%87%AA%E7%87%9F%E5%95%86%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5'
 dRsltDf = parseLeaderBoard(url, LEADERBOARD_MAX_RANK_CHK)
-saveToExcel(dRsltDf, 0, ((LEADERBOARD_MAX_RANK_CHK + 5) * 2), '自營商 單日')
+saveToExcel(dRsltDf, 0, ((LEADERBOARD_MAX_RANK_CHK + 5) * 3), '自營商 單日')
 
 LEADERBOARD_OVERLAP_DATA_COL_OFST = len(fRsltDf.columns) + 4
 
