@@ -287,10 +287,10 @@ holidays_array_valid = [1, # 2020
                         0] # 2025
 holidays_in_2020_month = [10, 10, 10, 1] # month
 holidays_in_2020_day   = [ 9,  2,  1, 1] # day, # 必須從後面的往回填
-holidays_in_2021_month = [12, 10,  9,  9,  6,  4, 4, 4,  2,  2,  2,  2,  2, 1] # month
-holidays_in_2021_day   = [31, 11, 21, 20, 14, 30, 5, 2, 16, 15, 12, 11, 10, 1] # day, # 必須從後面的往回填
+holidays_in_2021_month = [12, 10,  9,  9,  6,  4, 4, 4, 3,  2,  2,  2,  2,  2, 2, 2, 1] # month
+holidays_in_2021_day   = [31, 11, 21, 20, 14, 30, 5, 2, 1, 16, 15, 12, 11, 10, 9, 8, 1] # day, # 必須從後面的往回填
 holidays_len = [4, # 2020
-                14, # 2021
+                17, # 2021
                 0, # 2022
                 0, # 2023
                 0, # 2024
@@ -305,10 +305,22 @@ if not holidays_len[yesterday.year - 2020]:
     assertFunc(0, 'error code logic', 5)
 
 # 取得昨天的排行，並得到任兩大法人連續
-while (yesterday.weekday() >= 5):  # 只挑 1 ~ 5
+yesterdat_is_holiday = False
+i = 0
+while (i < holidays_len[yesterday.year - 2020]):
+    holidays = date(yesterday.year, holidays_in_2021_month[i], holidays_in_2021_day[i])
+    if yesterday == holidays:
+        yesterdat_is_holiday = True
+        break
+    if yesterday.month > holidays_in_2021_month[i]:
+        break
+    i+= 1
+
+while ((yesterday.weekday() >= 5) or (yesterdat_is_holiday)):  # 只挑 1 ~ 5
+    yesterdat_is_holiday = False
     yesterday = yesterday - timedelta(days=1)
     i = 0
-    while i < holidays_len[yesterday.year - 2020]:
+    while (i < holidays_len[yesterday.year - 2020]):
         holidays = date(yesterday.year, holidays_in_2021_month[i], holidays_in_2021_day[i])
         if yesterday == holidays:
             yesterday = yesterday - timedelta(days=1)
