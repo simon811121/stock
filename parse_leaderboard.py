@@ -9,6 +9,7 @@ import pandas as pd
 from openpyxl import load_workbook
 import xlsxwriter
 import numpy as np
+import urllib
 
 # ------------------------------
 #    assert funtion
@@ -24,69 +25,48 @@ def assertFunc(condition, txt, place):
 # ------------------------------
 # <INPUT>
 #        url:        for parsing
-#        chkRange:  total rank need to get
 # <OUTPUT>
 #        DataFrame
 # ------------------------------
-def parseLeaderBoard(url, chkRange):
+def parseLeaderBoard(url):
     # delay
     time.sleep(5)
     
-    # web header
-    headers = {'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+    # get html info
+    html = urllib.request.urlopen(url).read()
 
-    # get request
-    i = 3
-    while i > 0:
-        try:
-            resp = requests.get(url, headers=headers)
-            break
-        except (ConnectionError, ReadTimeout) as error:
-            print(error)
-            print('retry one more time after 60s', i, 'times left')
-            time.sleep(60)
-        i -= 1
-    
-    if i <= 0:
-        return None
+    # parse html
+    soup = BeautifulSoup(html, 'html5lib')
 
-    # change html encoding
-    resp.encoding = 'utf8'
+    # get table
+    table = soup.find('table', {'class': 't01'})
 
-    # get html data
-    soup = BeautifulSoup(resp.text, 'html5lib')
-    # --website layout--
-    # txtStockListData -> divStockList -> tblStockList
-    table = soup.find("table", {"id":"tblStockList"})
-
-    # parsing titel from leaderborad table
-    rows = table.find("tr")
-    titles = []
-    for row in rows:
+    # parsing contents from leaderborad table
+    table1 = table.find_all('tr')
+    contents = []
+    for row in table1[2:]:      
+        row = row.find_all('td')
         title = []
-        title = row.find("div")
-        col = title.get_text()
-        titles.append(col)
-
-    # parsing row data from leaderboard table
-    rows = table.find_all("tr", id=lambda x: x and x.startswith('row'))
-    parCols = []
-    for row in rows:
-        stockInfo = []
-        stockInfo = row.find_all("td")
-        cols = []
-        for i in range(0, len(stockInfo)):
-            col = stockInfo[i].get_text()
-            cols.append(col)
-        parCols.append(cols)
+        for row1 in row: 
+            col = row1.get_text()
+            title.append(col)
+        contents.append(title)
 
     # form DataFrame data from parsing result data
-    df = pd.DataFrame.from_dict(parCols)
-    df.columns = titles
-    df.index = df['排名']
-    del df['排名']
+    df = pd.DataFrame.from_dict(contents[1:])
+    contents[0][1] = table1[1].find_all('td')[0].text + contents[0][1]
+    contents[0][2] = table1[1].find_all('td')[0].text + '張數'
+    contents[0][6] = table1[1].find_all('td')[1].text + contents[0][6]
+    contents[0][7] = table1[1].find_all('td')[1].text + '張數'
+    df.columns = contents[0]
+    date = []
+    for i in range(0,len(df)):
+        date.append(table1[0].find("div").get_text()[3:])
+    df['法人買賣日期'] = pd.DataFrame.from_dict(date)
+    df.index = df['名次']
+    del df['名次']
     
-    return df[0:chkRange]  # 排名 1 ~ chkRange
+    return df
 
 #----------------------------------------------------------------------
 #    save data
@@ -155,40 +135,25 @@ def saveToExcel(saveDf, startCol, startRow, txt):
 # 這個 function 是用來取得剛爬完蟲的資料
 # --------------------------------------
 def getRepeatStockIdDf(df1, df2, startCol, startRow, txt):
-    rsltDf = pd.merge(df1, df2, on=['代號'], how='inner')
-    if len(rsltDf) == 0: # no repeate stock id between two rank list
-        return rsltDf
-    rsltDf = rsltDf[['代號', '名稱_x', '法人買賣日期_x']]
-    rsltDf.rename(columns={'名稱_x' : '名稱', '法人買賣日期_x':'法人買賣日期'}, inplace=True)
-    rsltDf.index = np.arange(1, len(rsltDf) + 1)
-    if len(rsltDf) != 0:
-        saveToExcel(rsltDf, startCol, startRow, txt)
-    else:
-        try:
-            dateString = df1['法人買賣日期'][1]
-            dateString1 = dateString.split("/")
-        except Exception as error:
-            print(error)
-            assertFunc(0, 'error code logic', 2)
-
-        year = str(date.today().year)
-        if date.today().month < 10:
-            month = ' 0' + str(date.today().month)
-        else:
-            month = ' ' + str(date.today().month)
-
-        outputFileName = year + month + '月 三大法人買賣超 紀錄.xlsx'
-        sheetName = dateString1[0] + '-' + dateString1[1]
-        titleRow = 1 if ((startRow - 1) <= 0) else (startRow - 1)
-        try:
-            outputFile = load_workbook(outputFileName)
-            worksheet = outputFile.get_sheet_by_name(sheetName)
-            worksheet.cell(row=titleRow, column=startCol).value = txt
-            outputFile.save(outputFileName)
-        except Exception as error:
-            print(error)
-            assertFunc(0, 'error code logic', 3)
-    return rsltDf
+    rsltDfBuy = pd.merge(df1, df2, on=['買超股票名稱'], how='inner')
+    rsltDfSell = pd.merge(df1, df2, on=['賣超股票名稱'], how='inner')
+    if len(rsltDfBuy) == 0 and len(rsltDfSell) == 0: # no repeate stock id between two rank list
+        return rsltDfBuy, rsltDfSell
+    rsltDfBuy = rsltDfBuy[['買超股票名稱', '法人買賣日期_x']]
+    rsltDfBuy.dropna(subset=["買超股票名稱"], inplace=True)
+    rsltDfSell = rsltDfSell[['賣超股票名稱', '法人買賣日期_x']]
+    rsltDfSell.dropna(subset=["賣超股票名稱"], inplace=True)
+    rsltDfBuy.rename(columns={'法人買賣日期_x':'法人買賣日期'}, inplace=True)
+    rsltDfSell.rename(columns={'法人買賣日期_x':'法人買賣日期'}, inplace=True)
+    rsltDfBuy.index = np.arange(1, len(rsltDfBuy) + 1)
+    rsltDfSell.index = np.arange(1, len(rsltDfSell) + 1)
+    RowOfst = 5
+    if len(rsltDfBuy) != 0:
+        saveToExcel(rsltDfBuy, startCol, startRow, txt + '買超')
+        RowOfst = len(rsltDfBuy)
+    if len(rsltDfSell) != 0:
+        saveToExcel(rsltDfSell, startCol, startRow + RowOfst + 4, txt + '賣超')
+    return rsltDfBuy, rsltDfSell, startCol + len(rsltDfBuy.columns) + 4
 # ------------------------------
 # <INPUT>
 #        df1:    dataframe 1st to compare
@@ -198,11 +163,11 @@ def getRepeatStockIdDf(df1, df2, startCol, startRow, txt):
 # ---------------------------------------------------
 # 這個 function 是用來比較今日爬完結果，及昨日爬完結果
 # ---------------------------------------------------
-def getRepeatStockRankDf(df1, df2):
+def getRepeatStockRankDf(df1, df2, txt):
     if len(df1) == 0 or len(df2) == 0:
-        return None
+        return pd.DataFrame()
     try:        
-        rsltDf = pd.merge(df1, df2, on=['代號', '名稱'], how='inner')
+        rsltDf = pd.merge(df1, df2, on=[txt+'超股票名稱', '法人買賣日期'], how='inner')
     except:
         pass
 
@@ -211,72 +176,91 @@ def getRepeatStockRankDf(df1, df2):
 #----------------------------------------------------------------------
 #    get yesterday's rank overlap detail
 #----------------------------------------------------------------------
+#----------------------------------------------------------------------
+#    get yesterday's data
+#----------------------------------------------------------------------
 # ------------------------------
 # <INPUT>
-#        srcDf:    dataframe from yesterday's data
+#        excel_name:    excel 名稱
+#        sheet_name:    工作表名稱
+#        read_ofst:     從哪開始讀
+#        txt:           過濾文字
 # <OUTPUT>
-#        success:  get '代號' or not
-#        index:    that contain '代號'
+#        y_rank_df_buy:   法人買超股票 dataframe
+#        y_rank_df_sell:  法人賣超股票 dataframe
 # ------------------------------
-def splitDfByDiffOverlap(srcDf, startOfst):
-    chkIdx = 0
-    for index, row in srcDf.iloc[startOfst:].iterrows():
-        if row.values[0] == '代號':
-            return True, index
-        chkIdx = index
-    if chkIdx == len(srcDf):
-        return False, index
-
+def getYestData(excel_name, sheet_name, read_ofst, txt):
+    # y = yesterday; [read_ofst, read_ofst + 1] = 代號, 名稱
+    try:
+        y_rank_df_buy = pd.read_excel(excel_name, sheet_name=sheet_name, nrows=50, usecols=[read_ofst, read_ofst + 1])
+        y_rank_df_buy = y_rank_df_buy.dropna()
+        y_rank_df_buy.index = np.arange(1, len(y_rank_df_buy) + 1)
+        y_rank_df_buy = y_rank_df_buy.rename(columns={'Unnamed: '+str(read_ofst):'買超股票名稱', 'Unnamed: '+str(read_ofst+1):'法人買賣日期'})
+        y_rank_df_buy = y_rank_df_buy.rename(columns={'買超股票名稱'+txt:'買超股票名稱', '法人買賣日期'+txt: '法人買賣日期'})
+        try:
+            y_rank_df_sell = y_rank_df_buy[y_rank_df_buy.index[y_rank_df_buy['買超股票名稱']=='賣超股票名稱'][0]:]
+            y_rank_df_sell.rename(columns={'買超股票名稱':'賣超股票名稱'},inplace=True)
+            y_rank_df_sell.index = np.arange(1, len(y_rank_df_sell) + 1)
+            y_rank_df_buy = y_rank_df_buy[:y_rank_df_buy.index[y_rank_df_buy['買超股票名稱']=='賣超股票名稱'][0] - 1]
+        except:
+            y_rank_df_sell = pd.DataFrame()
+            print(txt + " 沒有賣超股票")
+    except:
+        y_rank_df_buy = pd.DataFrame()
+        y_rank_df_sell = pd.DataFrame()
+    
+    return y_rank_df_buy, y_rank_df_sell
 #----------------------------------------------------------------------
 #    code main
 #----------------------------------------------------------------------
 print(datetime.datetime.now())
-LEADERBOARD_MAX_RANK_CHK = 30
+LEADERBOARD_MAX_RANK_CHK = 50
 
 # a = amount = 成交量
+# TODO:
 # 成交量與昨日排行比
-url = 'https://goodinfo.tw/StockInfo/StockList.asp?RPT_TIME=&MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E6%88%90%E4%BA%A4%E9%87%8F%E5%A2%9E%E5%8A%A0%E5%BC%B5%E6%95%B8%E2%80%93%E7%95%B6%E6%97%A5%E6%88%90%E4%BA%A4%E9%87%8F%E8%88%87%E6%98%A8%E6%97%A5%E6%AF%94%40%40%E6%88%90%E4%BA%A4%E9%87%8F%E5%A2%9E%E5%8A%A0%E5%BC%B5%E6%95%B8%40%40%E7%95%B6%E6%97%A5%E6%88%90%E4%BA%A4%E9%87%8F%E8%88%87%E6%98%A8%E6%97%A5%E6%AF%94'
-aRstDf = parseLeaderBoard(url, LEADERBOARD_MAX_RANK_CHK)
-aRstDf = aRstDf[["代號", "名稱"]]
+# url = 'https://goodinfo.tw/StockInfo/StockList.asp?RPT_TIME=&MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E6%88%90%E4%BA%A4%E9%87%8F%E5%A2%9E%E5%8A%A0%E5%BC%B5%E6%95%B8%E2%80%93%E7%95%B6%E6%97%A5%E6%88%90%E4%BA%A4%E9%87%8F%E8%88%87%E6%98%A8%E6%97%A5%E6%AF%94%40%40%E6%88%90%E4%BA%A4%E9%87%8F%E5%A2%9E%E5%8A%A0%E5%BC%B5%E6%95%B8%40%40%E7%95%B6%E6%97%A5%E6%88%90%E4%BA%A4%E9%87%8F%E8%88%87%E6%98%A8%E6%97%A5%E6%AF%94'
+# url = 'https://fubon-ebrokerdj.fbs.com.tw/Z/ZG/ZG_B.djhtm' # 上市量增
+# aRstDf = parseLeaderBoard(url, LEADERBOARD_MAX_RANK_CHK)
+# aRstDf = aRstDf[["代號", "名稱"]]
+#aRstDf2 = pd.concat([aRstDf, fRsltDf['法人買賣日期']],axis=1)
+#saveToExcel(aRstDf2, 0, 1, '成交量與昨日排行比')
 
 # f = foreign = 外資
 # i = invset trust = 投信
 # d = dealer = 自營商
 # 外資單日
-url = 'https://goodinfo.tw/StockInfo/StockList.asp?RPT_TIME=&MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E5%A4%96%E8%B3%87%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5%40%40%E5%A4%96%E8%B3%87%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%40%40%E5%A4%96%E8%B3%87%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5'
-fRsltDf = parseLeaderBoard(url, LEADERBOARD_MAX_RANK_CHK)
-aRstDf2 = pd.concat([aRstDf, fRsltDf['法人買賣日期']],axis=1)
-saveToExcel(aRstDf2, 0, 1, '成交量與昨日排行比')
-
-saveToExcel(fRsltDf, 0, (LEADERBOARD_MAX_RANK_CHK + 5), '外資 單日')
+url = 'https://fubon-ebrokerdj.fbs.com.tw/Z/ZG/ZGK_D.djhtm'
+fRsltDf = parseLeaderBoard(url)
+saveToExcel(fRsltDf, 0, (len(fRsltDf) + 5), '外資 單日')
 
 # 投信單日
-url = 'https://goodinfo.tw/StockInfo/StockList.asp?RPT_TIME=&MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E6%8A%95%E4%BF%A1%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5%40%40%E6%8A%95%E4%BF%A1%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%40%40%E6%8A%95%E4%BF%A1%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5'
-iRsltDf = parseLeaderBoard(url, LEADERBOARD_MAX_RANK_CHK)
-saveToExcel(iRsltDf, 0, ((LEADERBOARD_MAX_RANK_CHK + 5) * 2), '投信 單日')
+url = 'https://fubon-ebrokerdj.fbs.com.tw/Z/ZG/ZGK_DD.djhtm'
+iRsltDf = parseLeaderBoard(url)
+saveToExcel(iRsltDf, 0, ((len(iRsltDf) + 5) * 2), '投信 單日')
 
 # 自營商單日
-url = 'https://goodinfo.tw/StockInfo/StockList.asp?RPT_TIME=&MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E8%87%AA%E7%87%9F%E5%95%86%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5%40%40%E8%87%AA%E7%87%9F%E5%95%86%E7%B4%AF%E8%A8%88%E8%B2%B7%E8%B6%85%40%40%E8%87%AA%E7%87%9F%E5%95%86%E8%B2%B7%E8%B6%85%E5%BC%B5%E6%95%B8+%E2%80%93+%E7%95%B6%E6%97%A5'
-dRsltDf = parseLeaderBoard(url, LEADERBOARD_MAX_RANK_CHK)
-saveToExcel(dRsltDf, 0, ((LEADERBOARD_MAX_RANK_CHK + 5) * 3), '自營商 單日')
-
-LEADERBOARD_OVERLAP_DATA_COL_OFST = len(fRsltDf.columns) + 4
+url = 'https://fubon-ebrokerdj.fbs.com.tw/Z/ZG/ZGK_DB.djhtm'
+dRsltDf = parseLeaderBoard(url)
+saveToExcel(dRsltDf, 0, ((len(dRsltDf) + 5) * 3), '自營商 單日')
 
 # 外資 & 投信 單日
-fileRowOfst = 1
-f_i_RsltDf = getRepeatStockIdDf(fRsltDf, iRsltDf, LEADERBOARD_OVERLAP_DATA_COL_OFST, fileRowOfst, '外資 & 投信 單日')
+fileColumnOfst = 1
+f_i_RsltDf_buy, f_i_RsltDf_sell, fileColumnOfst = getRepeatStockIdDf(fRsltDf, iRsltDf, fileColumnOfst, 0, '外資 & 投信 單日')
 
 # 投信 & 自營商 單日
-fileRowOfst = fileRowOfst + len(f_i_RsltDf) + 4
-i_d_RsltDf = getRepeatStockIdDf(iRsltDf, dRsltDf, LEADERBOARD_OVERLAP_DATA_COL_OFST, fileRowOfst, '投信 & 自營商 單日')
+i_d_RsltDf_buy, i_d_RsltDf_sell, fileColumnOfst = getRepeatStockIdDf(iRsltDf, dRsltDf, fileColumnOfst, 0, '投信 & 自營商 單日')
 
 # 外資 & 自營商 單日
-fileRowOfst = fileRowOfst + len(i_d_RsltDf) + 4
-f_d_RsltDf = getRepeatStockIdDf(fRsltDf, dRsltDf, LEADERBOARD_OVERLAP_DATA_COL_OFST, fileRowOfst, '外資 & 自營商 單日')
+f_d_RsltDf_buy, f_d_RsltDf_sell, fileColumnOfst = getRepeatStockIdDf(fRsltDf, dRsltDf, fileColumnOfst, 0, '外資 & 自營商 單日')
 
 # 外資 & 投信 & 自營商 單日
-fileRowOfst = fileRowOfst + len(f_d_RsltDf) + 4
-f_i_d_RsltDf = getRepeatStockIdDf(f_i_RsltDf, i_d_RsltDf, LEADERBOARD_OVERLAP_DATA_COL_OFST, fileRowOfst, '外資 & 投信 & 自營商 單日')
+f_i_RsltDf = pd.concat([f_i_RsltDf_buy, f_i_RsltDf_sell], axis=0)
+i_d_RsltDf = pd.concat([i_d_RsltDf_buy, i_d_RsltDf_sell], axis=0)
+f_i_d_RsltDf_buy, f_i_d_RsltDf_sell, fileColumnOfst = getRepeatStockIdDf(f_i_RsltDf, i_d_RsltDf, fileColumnOfst, 0, '外資 & 投信 & 自營商 單日')
+
+# 計算連續買超儲存 colunm 排數
+LEADERBOARD_OVERLAP_DATA_COL_OFST = fileColumnOfst
 
 # 設定國定假日
 holidays_array_valid = [1, # 2020
@@ -287,10 +271,10 @@ holidays_array_valid = [1, # 2020
                         0] # 2025
 holidays_in_2020_month = [10, 10, 10, 1] # month
 holidays_in_2020_day   = [ 9,  2,  1, 1] # day, # 必須從後面的往回填
-holidays_in_2021_month = [12, 10,  9,  9,  6,  4, 4, 4, 3,  2,  2,  2,  2,  2, 2, 2, 1] # month
-holidays_in_2021_day   = [31, 11, 21, 20, 14, 30, 5, 2, 1, 16, 15, 12, 11, 10, 9, 8, 1] # day, # 必須從後面的往回填
+holidays_in_2021_month = [12, 10,  9,  9,  6, 5,  4, 4, 4, 3,  2,  2,  2,  2,  2, 2, 2, 1] # month
+holidays_in_2021_day   = [31, 11, 21, 20, 14, 7, 30, 5, 2, 1, 16, 15, 12, 11, 10, 9, 8, 1] # day, # 必須從後面的往回填
 holidays_len = [4, # 2020
-                17, # 2021
+                18, # 2021
                 0, # 2022
                 0, # 2023
                 0, # 2024
@@ -340,48 +324,74 @@ if yesterday.day < 10:
 else:
     sheet_name = month_str + str(yesterday.month) + '-' + str(yesterday.day)
 
-fileColOfst = LEADERBOARD_OVERLAP_DATA_COL_OFST + 1
+# 取得昨天的排行榜，計算連續多日排行榜
+y_f_i_RsltDf_buy, y_f_i_RsltDf_sell = getYestData(excel_name, sheet_name, 2, '')
+y_i_d_RsltDf_buy, y_i_d_RsltDf_sell = getYestData(excel_name, sheet_name, 8, '.1')
+y_f_d_RsltDf_buy, y_f_d_RsltDf_sell = getYestData(excel_name, sheet_name, 14, '.2')
+y_f_i_d_RsltDf_buy, y_f_i_d_RsltDf_sell = getYestData(excel_name, sheet_name, 20, '.3')
+
+# 找連續
+add_col = 4
+fileColOfst = LEADERBOARD_OVERLAP_DATA_COL_OFST
+fileRowOfst = 5
+# 買超
+c_rank_Df_buy = None
 try:
-    y_rank_df = pd.read_excel(excel_name, sheet_name=sheet_name, header=1, usecols=[fileColOfst, fileColOfst + 1])  # y = yesterday; [fileColOfst, fileColOfst + 1] = 代號, 名稱
-    y_rank_df = y_rank_df.dropna()
-    y_rank_df.index = np.arange(1, len(y_rank_df) + 1)
-    
-    index = 0
-    rsltIndex = []
-    parseResult, index = splitDfByDiffOverlap(y_rank_df, index)
-    while parseResult:
-        rsltIndex.append(index)
-        parseResult, index = splitDfByDiffOverlap(y_rank_df, index)    
+    df1 = getRepeatStockRankDf(y_f_i_d_RsltDf_buy, f_i_RsltDf_buy, '買')
+    df2 = getRepeatStockRankDf(y_f_i_d_RsltDf_buy, i_d_RsltDf_buy, '買')
+    df3 = getRepeatStockRankDf(y_f_i_d_RsltDf_buy, f_d_RsltDf_buy, '買')
+    df4 = getRepeatStockRankDf(y_f_i_d_RsltDf_buy, f_i_d_RsltDf_buy, '買')
+    tmp_Df = [df1, df2, df3, df4]
+    c_rank_Df_buy = pd.concat(tmp_Df)
+    c_rank_Df_buy = c_rank_Df_buy.drop_duplicates()
+    c_rank_Df_buy.index = np.arange(1, len(c_rank_Df_buy) + 1)
 
-    y_rank_df = y_rank_df.drop(rsltIndex)
-    y_rank_df = y_rank_df.drop_duplicates()
-    y_rank_df = y_rank_df.rename(columns={'代號.1' : '代號', '名稱.1' : '名稱'})
-
-    # 用昨天的排行榜，計算連續多日排行榜
-    df1 = getRepeatStockRankDf(y_rank_df, f_i_RsltDf)
-    df2 = getRepeatStockRankDf(y_rank_df, i_d_RsltDf)
-    df3 = getRepeatStockRankDf(y_rank_df, f_d_RsltDf)
-    df4 = getRepeatStockRankDf(y_rank_df, f_i_d_RsltDf)
-    tmpDf = [df1, df2, df3, df4]
-    c_rank_df = pd.concat(tmpDf)
-    c_rank_df = c_rank_df.drop_duplicates()
-    c_rank_df.index = np.arange(1, len(c_rank_df) + 1)
-
-    fileColOfst = LEADERBOARD_OVERLAP_DATA_COL_OFST + len(f_i_RsltDf.columns) + 4
-    fileRowOfst = 1
-    saveToExcel(c_rank_df, fileColOfst, fileRowOfst, '任兩大法人連續')
+    saveToExcel(c_rank_Df_buy, fileColOfst, 0, '任兩大法人連續買超')
+    add_col = len(c_rank_Df_buy.columns) + 4
+    fileRowOfst = len(c_rank_Df_buy)
 except Exception as error:
     print(error)
     assertFunc(0, 'error code logic', 6)
 
-# 取得要輸入的股票
-tmpDf = [f_i_RsltDf, i_d_RsltDf, f_d_RsltDf]
-s_rank_df = pd.concat(tmpDf)
-tmpDf = [s_rank_df, f_i_d_RsltDf, c_rank_df]
-s_rank_df = pd.concat(tmpDf)
-s_rank_df = s_rank_df.drop_duplicates(keep=False)
-s_rank_df.index = np.arange(1, len(s_rank_df) + 1)
-fileRowOfst = fileRowOfst + len(c_rank_df) + 4
-saveToExcel(s_rank_df, fileColOfst, fileRowOfst, '單日該輸入的股票')
+# 賣超
+c_rank_Df_sell = None
+try:
+    df1 = getRepeatStockRankDf(y_f_i_d_RsltDf_sell, f_i_RsltDf_sell, '賣')
+    df2 = getRepeatStockRankDf(y_f_i_d_RsltDf_sell, i_d_RsltDf_sell, '賣')
+    df3 = getRepeatStockRankDf(y_f_i_d_RsltDf_sell, f_d_RsltDf_sell, '賣')
+    df4 = getRepeatStockRankDf(y_f_i_d_RsltDf_sell, f_i_d_RsltDf_sell, '賣')
+    tmp_Df = [df1, df2, df3, df4]
+    c_rank_Df_sell = pd.concat(tmp_Df)
+    c_rank_Df_sell = c_rank_Df_sell.drop_duplicates()
+    c_rank_Df_sell.index = np.arange(1, len(c_rank_Df_sell) + 1)
+    
+    saveToExcel(c_rank_Df_sell, fileColOfst, fileRowOfst + 4, '任兩大法人連續賣超')
+    add_col = len(c_rank_Df_sell.columns) + 4
+except Exception as error:
+    print(error)
+    assertFunc(0, 'error code logic', 7)
+
+fileColOfst += (add_col + 2)
+
+# 取得要輸入的股票(買超)
+tod_Df_buy = [f_i_RsltDf_buy, i_d_RsltDf_buy, f_d_RsltDf_buy]
+s_rank_Df_buy = pd.concat(tod_Df_buy)
+tod_Df_buy = [s_rank_Df_buy, f_i_d_RsltDf_buy, c_rank_Df_buy]
+s_rank_Df_buy = pd.concat(tod_Df_buy)
+s_rank_Df_buy = s_rank_Df_buy.drop_duplicates(keep=False)
+s_rank_Df_buy.index = np.arange(1, len(s_rank_Df_buy) + 1)
+fileRowOfst = 5
+if len(s_rank_Df_buy):
+    fileRowOfst = len(s_rank_Df_buy)
+saveToExcel(s_rank_Df_buy, fileColOfst, 0, '單日該輸入的股票(買超)')
+
+# 取得要輸入的股票(買超)
+tod_Df_sell = [f_i_RsltDf_sell, i_d_RsltDf_sell, f_d_RsltDf_sell]
+s_rank_Df_sell = pd.concat(tod_Df_sell)
+tod_Df_sell = [s_rank_Df_sell, f_i_d_RsltDf_sell, c_rank_Df_sell]
+s_rank_Df_sell = pd.concat(tod_Df_sell)
+s_rank_Df_sell = s_rank_Df_sell.drop_duplicates(keep=False)
+s_rank_Df_sell.index = np.arange(1, len(s_rank_Df_sell) + 1)
+saveToExcel(s_rank_Df_sell, fileColOfst, fileRowOfst + 4, '單日該輸入的股票(賣超)')
 
 print("code end")
