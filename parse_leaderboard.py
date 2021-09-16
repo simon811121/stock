@@ -167,7 +167,10 @@ def getRepeatStockRankDf(df1, df2, txt):
     if len(df1) == 0 or len(df2) == 0:
         return pd.DataFrame()
     try:        
-        rsltDf = pd.merge(df1, df2, on=[txt+'超股票名稱', '法人買賣日期'], how='inner')
+        rsltDf = pd.merge(df1, df2, on=[txt+'超股票名稱'], how='inner')
+        rsltDf.index = np.arange(1, len(rsltDf) + 1)
+        rsltDf.rename(columns={'法人買賣日期_y':'法人買賣日期'},inplace=True)
+        rsltDf = rsltDf[[txt+'超股票名稱', '法人買賣日期']]
     except:
         pass
 
@@ -189,14 +192,15 @@ def getRepeatStockRankDf(df1, df2, txt):
 #        y_rank_df_buy:   法人買超股票 dataframe
 #        y_rank_df_sell:  法人賣超股票 dataframe
 # ------------------------------
-def getYestData(excel_name, sheet_name, read_ofst, txt):
+def getYestData(excel_name, sheet_name, read_ofst):
     # y = yesterday; [read_ofst, read_ofst + 1] = 代號, 名稱
     try:
         y_rank_df_buy = pd.read_excel(excel_name, sheet_name=sheet_name, nrows=50, usecols=[read_ofst, read_ofst + 1])
         y_rank_df_buy = y_rank_df_buy.dropna()
         y_rank_df_buy.index = np.arange(1, len(y_rank_df_buy) + 1)
         y_rank_df_buy = y_rank_df_buy.rename(columns={'Unnamed: '+str(read_ofst):'買超股票名稱', 'Unnamed: '+str(read_ofst+1):'法人買賣日期'})
-        y_rank_df_buy = y_rank_df_buy.rename(columns={'買超股票名稱'+txt:'買超股票名稱', '法人買賣日期'+txt: '法人買賣日期'})
+        txt = y_rank_df_buy.columns[0][-2:]
+        y_rank_df_buy = y_rank_df_buy.rename(columns={y_rank_df_buy.columns[0]:y_rank_df_buy.columns[0][:-2], y_rank_df_buy.columns[1]:y_rank_df_buy.columns[1][:-2]})
         try:
             y_rank_df_sell = y_rank_df_buy[y_rank_df_buy.index[y_rank_df_buy['買超股票名稱']=='賣超股票名稱'][0]:]
             y_rank_df_sell.rename(columns={'買超股票名稱':'賣超股票名稱'},inplace=True)
@@ -325,12 +329,14 @@ else:
     sheet_name = month_str + str(yesterday.month) + '-' + str(yesterday.day)
 
 # 取得昨天的排行榜，計算連續多日排行榜
-y_f_i_RsltDf_buy, y_f_i_RsltDf_sell = getYestData(excel_name, sheet_name, 2, '')
-y_i_d_RsltDf_buy, y_i_d_RsltDf_sell = getYestData(excel_name, sheet_name, 8, '.1')
-y_f_d_RsltDf_buy, y_f_d_RsltDf_sell = getYestData(excel_name, sheet_name, 14, '.2')
-y_f_i_d_RsltDf_buy, y_f_i_d_RsltDf_sell = getYestData(excel_name, sheet_name, 20, '.3')
+# y_f_i_RsltDf_buy, y_f_i_RsltDf_sell = getYestData(excel_name, sheet_name, 2)
+# y_i_d_RsltDf_buy, y_i_d_RsltDf_sell = getYestData(excel_name, sheet_name, 8)
+# y_f_d_RsltDf_buy, y_f_d_RsltDf_sell = getYestData(excel_name, sheet_name, 14)
+y_s_f_i_d_RsltDf_buy, y_s_f_i_d_RsltDf_sell = getYestData(excel_name, sheet_name, 20)  # s => 三大同時 Simultaneously
+y_f_i_d_RsltDf_buy, y_f_i_d_RsltDf_sell = getYestData(excel_name, sheet_name, 32)      # 任兩個法人
 
 # 找連續
+bool_add_col = False
 add_col = 4
 fileColOfst = LEADERBOARD_OVERLAP_DATA_COL_OFST
 fileRowOfst = 5
@@ -347,7 +353,9 @@ try:
     c_rank_Df_buy.index = np.arange(1, len(c_rank_Df_buy) + 1)
 
     saveToExcel(c_rank_Df_buy, fileColOfst, 0, '任兩大法人連續買超')
-    add_col = len(c_rank_Df_buy.columns) + 4
+    if bool_add_col == False:
+        add_col = len(c_rank_Df_buy.columns) + 4
+        bool_add_col = True
     fileRowOfst = len(c_rank_Df_buy)
 except Exception as error:
     print(error)
@@ -366,12 +374,14 @@ try:
     c_rank_Df_sell.index = np.arange(1, len(c_rank_Df_sell) + 1)
     
     saveToExcel(c_rank_Df_sell, fileColOfst, fileRowOfst + 4, '任兩大法人連續賣超')
-    add_col = len(c_rank_Df_sell.columns) + 4
+    if bool_add_col == False:
+        add_col = len(c_rank_Df_sell.columns) + 4
+        bool_add_col = True
 except Exception as error:
     print(error)
     assertFunc(0, 'error code logic', 7)
 
-fileColOfst += (add_col + 2)
+fileColOfst += (add_col)
 
 # 取得要輸入的股票(買超)
 tod_Df_buy = [f_i_RsltDf_buy, i_d_RsltDf_buy, f_d_RsltDf_buy]
