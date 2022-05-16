@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 import xlsxwriter
 import numpy as np
 import urllib
+import ssl
 
 # ------------------------------
 #    assert funtion
@@ -32,6 +33,8 @@ def parseLeaderBoard(url):
     # delay
     time.sleep(5)
     
+    ssl._create_default_https_context = ssl._create_unverified_context
+
     # get html info
     html = urllib.request.urlopen(url).read()
 
@@ -275,17 +278,23 @@ holidays_array_valid = [1, # 2020
                         0] # 2025
 holidays_in_2020_month = [10, 10, 10, 1] # month
 holidays_in_2020_day   = [ 9,  2,  1, 1] # day, # 必須從後面的往回填
-holidays_in_2021_month = [12, 10,  9,  9,  6, 5,  4, 4, 4, 3,  2,  2,  2,  2,  2, 2, 2, 1] # month
-holidays_in_2021_day   = [31, 11, 21, 20, 14, 7, 30, 5, 2, 1, 16, 15, 12, 11, 10, 9, 8, 1] # day, # 必須從後面的往回填
+holidays_in_2021_month = [12, 10,  9,  9,  9,  6, 5,  4, 4, 4, 3,  2,  2,  2,  2,  2, 2, 2, 1, 1] # month
+holidays_in_2021_day   = [31, 11, 22, 21, 20, 14, 7, 30, 5, 2, 1, 16, 15, 12, 11, 10, 9, 8, 3, 1] # day, # 必須從後面的往回填
+holidays_in_2022_month = [10, 9, 6, 5, 4, 4,  2, 2, 2, 2, 2,  1,  1,  1, 1] # month
+holidays_in_2022_day   = [10, 9, 3, 2, 5, 4, 28, 4, 3, 2, 1, 31, 28, 27, 1] # day, # 必須從後面的往回填
+
+this_year_month = holidays_in_2021_month
+this_year_day = holidays_in_2021_day
+
 holidays_len = [4, # 2020
                 18, # 2021
-                0, # 2022
+                16, # 2022
                 0, # 2023
                 0, # 2024
                 0] # 2025
 
 yesterday = date.today() - timedelta(days=1)
-if not holidays_array_valid[yesterday.year - 2020]:
+if not holidays_array_valid[yesterday.year - 2021]:
     print('please fill holidays in ' + str(yesterday.year))
     assertFunc(0, 'error code logic', 4)
 if not holidays_len[yesterday.year - 2020]:
@@ -296,11 +305,11 @@ if not holidays_len[yesterday.year - 2020]:
 yesterdat_is_holiday = False
 i = 0
 while (i < holidays_len[yesterday.year - 2020]):
-    holidays = date(yesterday.year, holidays_in_2021_month[i], holidays_in_2021_day[i])
+    holidays = date(yesterday.year, this_year_month[i], this_year_day[i])
     if yesterday == holidays:
         yesterdat_is_holiday = True
         break
-    if yesterday.month > holidays_in_2021_month[i]:
+    if yesterday.month > this_year_month[i]:
         break
     i+= 1
 
@@ -309,10 +318,10 @@ while ((yesterday.weekday() >= 5) or (yesterdat_is_holiday)):  # 只挑 1 ~ 5
     yesterday = yesterday - timedelta(days=1)
     i = 0
     while (i < holidays_len[yesterday.year - 2020]):
-        holidays = date(yesterday.year, holidays_in_2021_month[i], holidays_in_2021_day[i])
+        holidays = date(yesterday.year, this_year_month[i], this_year_day[i])
         if yesterday == holidays:
             yesterday = yesterday - timedelta(days=1)
-        if yesterday.month > holidays_in_2021_month[i]:
+        if yesterday.month > this_year_month[i]:
             break
         i += 1
         
